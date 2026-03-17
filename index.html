@@ -302,7 +302,7 @@
 
     /* LOGO */
     .hero__logo {
-      height: 88px;
+      height: 160px;
       width: auto;
       object-fit: contain;
       /* If logo is dark-on-white, enable this to make it white:
@@ -1739,11 +1739,10 @@
           el.playsInline = true;
           el.setAttribute('aria-hidden', 'true');
 
-          const src_ = document.createElement('source');
-          src_.src = src;
-          el.appendChild(src_);
+          // src set directly on video so error fires on video element itself
+          el.src = src;
 
-          el.addEventListener('loadeddata', () => {
+          el.addEventListener('canplay', () => {
             container.appendChild(el);
             el.play().catch(() => {});
             requestAnimationFrame(() => container.classList.add('is-visible'));
