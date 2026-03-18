@@ -305,6 +305,21 @@
     .hero__zui {
       display: none;
     }
+    /* ── VINE SCENE ─────────────────────────────────────────── */
+    .vine-scene {
+      position: relative;
+      width: 100%;
+      height: 320px;
+      overflow: visible;
+      pointer-events: none;
+    }
+    @media (max-width: 1024px) { .vine-scene { display: none; } }
+    #vineCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+
     @keyframes zuiFadeIn {
       from { opacity: 0; transform: translateY(-6px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -1283,6 +1298,14 @@
   </section>
 
 
+  <!-- ════════════════════════════════════════════════════════════
+       GOLDENE RANKEN-SZENE
+  ════════════════════════════════════════════════════════════ -->
+  <div class="vine-scene" id="vineScene" aria-hidden="true">
+    <canvas id="vineCanvas"></canvas>
+  </div>
+
+
   <!-- ============================================================
        ABOUT SECTION
   ============================================================ -->
@@ -1809,360 +1832,388 @@
     });
 
     // ────────────────────────────────────────────────────────────
-    // ROSEN-GEWÄCHSE – wachsen von den Bildschirmrändern, Desktop only
+    // GOLDENE RANKEN – verankert, nur Desktop (≥1024px)
     // ────────────────────────────────────────────────────────────
-    (function initRoseGarden() {
+    (function initVines() {
       if (window.matchMedia('(max-width: 1024px)').matches) return;
 
-      var cvs = document.createElement('canvas');
-      cvs.setAttribute('aria-hidden', 'true');
-      cvs.style.cssText = [
-        'position:fixed','inset:0','width:100%','height:100%',
-        'z-index:2','pointer-events:none'
-      ].join(';');
-      document.body.appendChild(cvs);
-
+      var cvs = document.getElementById('vineCanvas');
+      if (!cvs) return;
       var ctx = cvs.getContext('2d');
       var W = 0, H = 0;
-      var mouse = { x: -9999, y: -9999 };
-      var plants = [];
+      var mouse       = { x: -9999, y: -9999 };
+      var vines       = [];
       var fallenPetals = [];
 
-      /* ── PRNG ─────────────────────────────────────────────── */
-      var _s = 0;
-      function seedRng(v) { _s = (v ^ 0xDEADBEEF) >>> 0; }
+      /* ── GOLD-Palette ─────────────────────────────────────── */
+      var G = {
+        stem:   'rgba(185,145,55,',
+        bright: 'rgba(230,195,110,',
+        deep:   'rgba(150,110,35,',
+        glow:   'rgba(220,185,100,',
+      };
+
+      function gc(base, a) { return base + a + ')'; }
+
+      /* ── PRNG ──────────────────────────────────────────── */
+      var _s = 0xDEADC0DE;
       function rng() {
         _s ^= _s << 13; _s ^= _s >> 17; _s ^= _s << 5;
         return (_s >>> 0) / 4294967295;
       }
+      function rngSeed(v) { _s = (v ^ 0xABC12345) >>> 0; }
 
-      /* ── Farbkonstanten ───────────────────────────────────── */
-      var C = {
-        stem:   '#1C3A10',
-        leaf1:  '#254D14',
-        leaf2:  '#3A6B22',
-        thorn:  '#152D0B',
-        p_out:  [220, 180, 100],   // Außenblüte: Champagner-Gold
-        p_mid:  [196, 148,  55],   // Mitte
-        p_in:   [155, 105,  30],   // Innenblüte
-        p_ctr:  [ 90,  60,  15],   // Stempel
-      };
-
-      function rgba(arr, a) {
-        return 'rgba(' + arr[0] + ',' + arr[1] + ',' + arr[2] + ',' + a + ')';
-      }
-
-      /* ── Einzelblütenblatt ────────────────────────────────── */
-      function drawPetal(size, col, depth) {
-        var c = depth > 0.5 ? 0.28 : 0.38;
+      /* ── Ranke zeichnen ────────────────────────────────────── */
+      function drawVinePath(pts, lw, alpha, glowAmt) {
+        if (pts.length < 2) return;
+        if (glowAmt > 0.05) {
+          ctx.shadowColor = gc(G.glow, glowAmt * 0.7);
+          ctx.shadowBlur  = 4 + glowAmt * 20;
+        } else { ctx.shadowBlur = 0; }
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.bezierCurveTo( size * c,  size * 0.05,  size * c, -size * 0.85,  0, -size);
-        ctx.bezierCurveTo(-size * c, -size * 0.85, -size * c,  size * 0.05,  0,  0);
-        var g = ctx.createLinearGradient(0, 0, 0, -size);
-        g.addColorStop(0,   rgba(C.p_in,  0.92));
-        g.addColorStop(0.4, rgba(col,     0.88));
-        g.addColorStop(1,   rgba(C.p_out, 0.80));
-        ctx.fillStyle = g;
-        ctx.fill();
-        ctx.strokeStyle = rgba(C.p_in, 0.25);
-        ctx.lineWidth = 0.4;
-        ctx.stroke();
-      }
-
-      /* ── Rose zeichnen ────────────────────────────────────── */
-      function drawRose(x, y, size, bloom) {
-        var rings = [
-          { n: 5, rf: 0.18, sf: 0.30, off: 0.0,  col: C.p_in  },
-          { n: 6, rf: 0.35, sf: 0.42, off: 0.25, col: C.p_mid },
-          { n: 7, rf: 0.58, sf: 0.56, off: 0.1,  col: C.p_mid },
-          { n: 8, rf: 0.80, sf: 0.68, off: 0.35, col: C.p_out },
-        ];
-        ctx.save();
-        ctx.translate(x, y);
-        for (var r = rings.length - 1; r >= 0; r--) {
-          var ring = rings[r];
-          var openness = Math.max(0, Math.min(1, (bloom - r * 0.18)));
-          var rad  = size * ring.rf * (0.25 + openness * 0.75);
-          var psz  = size * ring.sf * (0.4 + openness * 0.6);
-          for (var i = 0; i < ring.n; i++) {
-            var angle = (i / ring.n) * Math.PI * 2 + ring.off;
-            ctx.save();
-            ctx.rotate(angle);
-            ctx.translate(0, -rad);
-            drawPetal(psz, ring.col, r / rings.length);
-            ctx.restore();
-          }
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (var i = 1; i < pts.length - 1; i++) {
+          var mx = (pts[i].x + pts[i+1].x) * 0.5;
+          var my = (pts[i].y + pts[i+1].y) * 0.5;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
         }
-        ctx.beginPath();
-        ctx.arc(0, 0, size * 0.10, 0, Math.PI * 2);
-        ctx.fillStyle = rgba(C.p_ctr, 0.95);
-        ctx.fill();
-        ctx.restore();
+        ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+        ctx.strokeStyle = gc(G.stem, alpha);
+        ctx.lineWidth   = lw;
+        ctx.lineCap     = 'round';
+        ctx.lineJoin    = 'round';
+        ctx.stroke();
+        ctx.shadowBlur  = 0;
       }
 
-      /* ── Blatt zeichnen ───────────────────────────────────── */
-      function drawLeaf(x, y, angle, size) {
+      /* ── Goldene Spirale / Tendril ─────────────────────────── */
+      function drawTendril(x, y, angle, size, alpha, glow) {
+        var loops = 1.8, steps = 40;
+        var pts = [];
+        for (var i = 0; i <= steps; i++) {
+          var t   = i / steps;
+          var r   = size * (1 - t * 0.85);
+          var a   = angle + t * Math.PI * 2 * loops;
+          pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+        }
+        if (glow > 0.05) {
+          ctx.shadowColor = gc(G.glow, glow * 0.6);
+          ctx.shadowBlur  = 3 + glow * 14;
+        } else { ctx.shadowBlur = 0; }
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (var j = 1; j < pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
+        ctx.strokeStyle = gc(G.bright, alpha * 0.85);
+        ctx.lineWidth   = 0.8;
+        ctx.stroke();
+        ctx.shadowBlur  = 0;
+      }
+
+      /* ── Goldenes Blatt ───────────────────────────────────────── */
+      function drawLeaf(x, y, angle, size, alpha, glow) {
+        if (glow > 0.05) {
+          ctx.shadowColor = gc(G.glow, glow * 0.65);
+          ctx.shadowBlur  = 3 + glow * 12;
+        } else { ctx.shadowBlur = 0; }
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(angle);
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.bezierCurveTo( size * 0.55, -size * 0.25,  size * 0.50, -size * 0.85,  0, -size);
-        ctx.bezierCurveTo(-size * 0.50, -size * 0.85, -size * 0.55, -size * 0.25,  0,  0);
+        ctx.bezierCurveTo( size*0.45, -size*0.2,  size*0.40, -size*0.8,  0, -size);
+        ctx.bezierCurveTo(-size*0.40, -size*0.8, -size*0.45, -size*0.2,  0,  0);
         var g = ctx.createLinearGradient(0, 0, 0, -size);
-        g.addColorStop(0, C.leaf1); g.addColorStop(1, C.leaf2);
+        g.addColorStop(0,   gc(G.deep,   alpha * 0.9));
+        g.addColorStop(0.5, gc(G.stem,   alpha * 0.85));
+        g.addColorStop(1,   gc(G.bright, alpha * 0.7));
         ctx.fillStyle = g;
         ctx.fill();
         ctx.beginPath();
         ctx.moveTo(0, 0); ctx.lineTo(0, -size);
-        ctx.strokeStyle = rgba([20, 50, 10], 0.40);
-        ctx.lineWidth = 0.6; ctx.stroke();
+        ctx.strokeStyle = gc(G.bright, alpha * 0.4);
+        ctx.lineWidth = 0.5; ctx.stroke();
+        ctx.shadowBlur = 0;
         ctx.restore();
       }
 
-      /* ── Dorn ─────────────────────────────────────────────── */
-      function drawThorn(x, y, angle) {
+      /* ── Goldene Rose ─────────────────────────────────────────── */
+      function drawRose(x, y, size, bloom, alpha, glow) {
+        var rings = [
+          { n: 5, rf: 0.15, sf: 0.28 },
+          { n: 6, rf: 0.32, sf: 0.40 },
+          { n: 7, rf: 0.55, sf: 0.52 },
+          { n: 8, rf: 0.78, sf: 0.65 },
+        ];
+        if (glow > 0.05) {
+          ctx.shadowColor = gc(G.glow, glow * 0.8);
+          ctx.shadowBlur  = 6 + glow * 22;
+        } else { ctx.shadowBlur = 0; }
         ctx.save();
-        ctx.translate(x, y); ctx.rotate(angle);
+        ctx.translate(x, y);
+        for (var r = rings.length - 1; r >= 0; r--) {
+          var ring     = rings[r];
+          var openness = Math.max(0, Math.min(1, (bloom - r * 0.20)));
+          var rad      = size * ring.rf * (0.3 + openness * 0.7);
+          var psz      = size * ring.sf * (0.35 + openness * 0.65);
+          var depth    = r / rings.length;
+          for (var i = 0; i < ring.n; i++) {
+            var a = (i / ring.n) * Math.PI * 2 + r * 0.3;
+            ctx.save();
+            ctx.rotate(a);
+            ctx.translate(0, -rad);
+            var c = depth > 0.5 ? 0.26 : 0.36;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.bezierCurveTo( psz*c,  psz*0.05,  psz*c, -psz*0.85,  0, -psz);
+            ctx.bezierCurveTo(-psz*c, -psz*0.85, -psz*c,  psz*0.05,  0,  0);
+            var gr = ctx.createLinearGradient(0, 0, 0, -psz);
+            gr.addColorStop(0,   gc(G.deep,   alpha * 0.95));
+            gr.addColorStop(0.5, gc(G.stem,   alpha * 0.90));
+            gr.addColorStop(1,   gc(G.bright, alpha * 0.80));
+            ctx.fillStyle = gr;
+            ctx.fill();
+            ctx.strokeStyle = gc(G.deep, alpha * 0.3);
+            ctx.lineWidth = 0.3; ctx.stroke();
+            ctx.restore();
+          }
+        }
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(5, -4); ctx.lineTo(0, -2);
-        ctx.closePath();
-        ctx.fillStyle = C.thorn;
+        ctx.arc(0, 0, size * 0.10, 0, Math.PI * 2);
+        ctx.fillStyle = gc(G.bright, alpha);
         ctx.fill();
+        ctx.shadowBlur = 0;
         ctx.restore();
       }
 
-      /* ── Pflanze generieren ───────────────────────────────── */
-      function genPlant(rootX, side, seed) {
-        seedRng(seed);
-        var dir  = (side === 'left') ? 1 : -1;
-        var h    = 200 + rng() * 220;
-        var lean = dir * (0.25 + rng() * 0.30);
+      /* ── Ranken-Daten generieren ─────────────────────────────── */
+      function buildVines() {
+        rngSeed(0xC0DEB0CA);
+        vines = [];
 
-        var branches = [];
-        var bCount   = 2 + Math.floor(rng() * 2);
-        for (var i = 0; i < bCount; i++) {
-          var t       = 0.30 + i * (0.55 / bCount) + (rng() - 0.5) * 0.08;
-          var bDir    = (rng() > 0.5 ? 1 : -1) * dir;
-          var bLen    = 60 + rng() * 90;
-          var bAngle  = lean + bDir * (0.5 + rng() * 0.5);
-          var hasRose = i === bCount - 1 || rng() > 0.4;
-          branches.push({ t: t, len: bLen, angle: bAngle, hasRose: hasRose,
-                           bloom: 0.3 + rng() * 0.7, roseSize: 14 + rng() * 10 });
+        var starts = [
+          { x: 0, y: H * 0.85, dir:  1 },
+          { x: 0, y: H * 0.50, dir:  1 },
+          { x: 0, y: H * 0.20, dir:  1 },
+          { x: W, y: H * 0.85, dir: -1 },
+          { x: W, y: H * 0.50, dir: -1 },
+          { x: W, y: H * 0.20, dir: -1 },
+        ];
+
+        for (var s = 0; s < starts.length; s++) {
+          buildVineCluster(starts[s].x, starts[s].y, starts[s].dir);
         }
-
-        return {
-          rootX: rootX, side: side, height: h, lean: lean,
-          sway: 0, swayVel: 0,
-          bloom: 0.3 + rng() * 0.7, roseSize: 18 + rng() * 12,
-          thorns: [0.20, 0.45, 0.70],
-          branches: branches,
-          leafAngles: [0.18, 0.42, 0.65, 0.88].map(function(t) {
-            return { t: t, side: (t < 0.5 ? -1 : 1) * dir };
-          }),
-        };
       }
 
-      /* ── Punkt auf Hauptstamm (mit Sway) ─────────────────── */
-      function stemPoint(p, t) {
-        var sw   = Math.sin(p.sway) * p.height * 0.22;
-        var baseX = p.rootX + Math.sin(p.lean) * p.height * t;
-        var baseY = H - p.height * t;
-        return {
-          x: baseX + sw * t * t,
-          y: baseY
-        };
-      }
+      function buildVineCluster(rx, ry, dir) {
+        var mainLen = 3 + Math.floor(rng() * 3);
+        var pts     = [{ x: rx, y: ry }];
+        var x = rx, y = ry;
+        var angle = (dir > 0 ? 0 : Math.PI) + (rng() - 0.5) * 0.5 - 0.3;
 
-      /* ── Stamm zeichnen ───────────────────────────────────── */
-      function drawStem(p) {
-        var root = { x: p.rootX, y: H };
-        var mid  = stemPoint(p, 0.5);
-        var tip  = stemPoint(p, 1.0);
-
-        ctx.beginPath();
-        ctx.moveTo(root.x, root.y);
-        ctx.quadraticCurveTo(mid.x, mid.y, tip.x, tip.y);
-        ctx.strokeStyle = C.stem;
-        ctx.lineWidth   = 3.5;
-        ctx.lineCap     = 'round';
-        ctx.stroke();
-
-        /* Dornen */
-        for (var d = 0; d < p.thorns.length; d++) {
-          var tp = stemPoint(p, p.thorns[d]);
-          var tAngle = (p.side === 'left' ? 0.5 : -0.5) * Math.PI + (d % 2 === 0 ? 0.3 : -0.3);
-          drawThorn(tp.x, tp.y, tAngle);
+        for (var i = 0; i < mainLen; i++) {
+          var step = 60 + rng() * 80;
+          angle   += (rng() - 0.5) * 0.55;
+          x       += Math.cos(angle) * step;
+          y       += Math.sin(angle) * step - 20;
+          y        = Math.max(5, Math.min(H - 5, y));
+          pts.push({ x: x, y: y });
         }
 
-        /* Blätter am Stamm */
-        for (var l = 0; l < p.leafAngles.length; l++) {
-          var la = p.leafAngles[l];
-          var lp = stemPoint(p, la.t);
-          var lAngle = p.lean + la.side * 0.7 + Math.sin(p.sway) * la.t;
-          drawLeaf(lp.x, lp.y, lAngle, 18 + la.t * 8);
-        }
+        var leaves   = [];
+        var flowers  = [];
+        var tendrils = [];
 
-        /* Äste */
-        for (var b = 0; b < p.branches.length; b++) {
-          var br  = p.branches[b];
-          var bp  = stemPoint(p, br.t);
-          var bx2 = bp.x + Math.sin(br.angle) * br.len * (1 + Math.sin(p.sway) * 0.15);
-          var by2 = bp.y - Math.cos(br.angle) * br.len;
-
-          ctx.beginPath();
-          ctx.moveTo(bp.x, bp.y);
-          ctx.quadraticCurveTo(
-            bp.x + Math.sin(br.angle) * br.len * 0.5,
-            bp.y - Math.cos(br.angle) * br.len * 0.4,
-            bx2, by2
-          );
-          ctx.strokeStyle = C.stem;
-          ctx.lineWidth   = 2;
-          ctx.stroke();
-
-          drawLeaf(bx2 - Math.sin(br.angle) * 12,
-                   by2 + Math.cos(br.angle) * 8,
-                   br.angle + (p.side === 'left' ? -0.8 : 0.8), 14);
-
-          if (br.hasRose) {
-            drawRose(bx2, by2, br.roseSize, br.bloom);
+        for (var j = 1; j < pts.length; j++) {
+          if (rng() > 0.4) {
+            leaves.push({
+              x: pts[j].x + (rng() - 0.5) * 20,
+              y: pts[j].y + (rng() - 0.5) * 20,
+              angle: angle + dir * (0.6 + rng() * 0.8),
+              size:  10 + rng() * 14,
+              bloom: 0.5 + rng() * 0.5
+            });
+          }
+          if (rng() > 0.6) {
+            tendrils.push({
+              x: pts[j].x + (rng() - 0.5) * 15,
+              y: pts[j].y + (rng() - 0.5) * 15,
+              angle: rng() * Math.PI * 2,
+              size:  8 + rng() * 14
+            });
           }
         }
 
-        /* Hauptblüte an der Spitze */
-        drawRose(tip.x, tip.y, p.roseSize, p.bloom);
-      }
-
-      /* ── Fallende Blütenblätter ───────────────────────────── */
-      function spawnPetals(x, y) {
-        for (var i = 0; i < 8; i++) {
-          var angle = Math.random() * Math.PI * 2;
-          fallenPetals.push({
-            x: x, y: y,
-            vx: (Math.random() - 0.5) * 3,
-            vy: -2 - Math.random() * 3,
-            rot: Math.random() * Math.PI * 2,
-            spin: (Math.random() - 0.5) * 0.15,
-            size: 5 + Math.random() * 7,
-            alpha: 0.85,
-            col: Math.random() > 0.5 ? C.p_out : C.p_mid,
-          });
+        flowers.push({
+          x: pts[pts.length - 1].x,
+          y: pts[pts.length - 1].y,
+          size: 16 + rng() * 10,
+          bloom: 0.6 + rng() * 0.4
+        });
+        if (pts.length > 2) {
+          var mid = pts[Math.floor(pts.length * 0.5)];
+          if (rng() > 0.4) flowers.push({ x: mid.x, y: mid.y, size: 10 + rng() * 8, bloom: 0.4 + rng() * 0.5 });
         }
+
+        var subVines = [];
+        for (var b = 1; b < pts.length - 1; b++) {
+          if (rng() > 0.5) {
+            var bx = pts[b].x, by = pts[b].y;
+            var bAngle = angle + dir * (0.8 + rng() * 0.6);
+            var bLen   = 2 + Math.floor(rng() * 2);
+            var bPts   = [{ x: bx, y: by }];
+            for (var bi = 0; bi < bLen; bi++) {
+              bAngle += (rng() - 0.5) * 0.5;
+              bx     += Math.cos(bAngle) * (40 + rng() * 50);
+              by     += Math.sin(bAngle) * (40 + rng() * 50) - 15;
+              bPts.push({ x: bx, y: by });
+            }
+            var subLeaves = [];
+            for (var sl = 0; sl < bPts.length; sl++) {
+              if (rng() > 0.5) subLeaves.push({ x: bPts[sl].x, y: bPts[sl].y, angle: bAngle + (rng()-0.5)*1.2, size: 8+rng()*10, bloom: 0.5+rng()*0.5 });
+            }
+            subVines.push({
+              pts: bPts, width: 1, leaves: subLeaves,
+              flower:  rng() > 0.5 ? { x: bPts[bPts.length-1].x, y: bPts[bPts.length-1].y, size: 9+rng()*8, bloom: 0.4+rng()*0.5 } : null,
+              tendril: { x: bPts[bPts.length-1].x, y: bPts[bPts.length-1].y, angle: bAngle, size: 10+rng()*10 }
+            });
+          }
+        }
+
+        vines.push({ pts: pts, width: 2.2, leaves: leaves, flowers: flowers, tendrils: tendrils, subVines: subVines, glow: 0 });
       }
 
-      function updatePetals() {
-        for (var i = fallenPetals.length - 1; i >= 0; i--) {
-          var p = fallenPetals[i];
-          p.vy   += 0.12;
-          p.vx   *= 0.99;
-          p.x    += p.vx;
-          p.y    += p.vy;
-          p.rot  += p.spin;
-          p.alpha -= 0.008;
-          if (p.alpha <= 0 || p.y > H + 40) { fallenPetals.splice(i, 1); continue; }
+      /* ── Glow anhand Mausabstand ─────────────────────────────── */
+      function calcGlow(pts) {
+        var R = 180, minD = Infinity;
+        for (var i = 0; i < pts.length; i++) {
+          var dx = pts[i].x - mouse.x, dy = pts[i].y - mouse.y;
+          var d  = Math.sqrt(dx*dx + dy*dy);
+          if (d < minD) minD = d;
+        }
+        return minD < R ? Math.pow(1 - minD / R, 2) : 0;
+      }
 
+      /* ── Alles zeichnen ──────────────────────────────────────── */
+      function drawAll() {
+        ctx.clearRect(0, 0, W, H);
+        for (var i = 0; i < vines.length; i++) {
+          var v   = vines[i];
+          var tgt = calcGlow(v.pts);
+          v.glow += (tgt - v.glow) * 0.1;
+          var g   = v.glow;
+          var a   = 0.55 + g * 0.35;
+
+          drawVinePath(v.pts, v.width, a, g);
+          for (var s = 0; s < v.subVines.length; s++) {
+            var sv  = v.subVines[s];
+            var sga = calcGlow(sv.pts);
+            drawVinePath(sv.pts, sv.width, 0.45 + sga*0.3, sga);
+            for (var sl = 0; sl < sv.leaves.length; sl++) {
+              var lsv = sv.leaves[sl];
+              drawLeaf(lsv.x, lsv.y, lsv.angle, lsv.size, 0.40 + sga*0.3, sga);
+            }
+            if (sv.flower) drawRose(sv.flower.x, sv.flower.y, sv.flower.size, sv.flower.bloom, 0.70 + sga*0.25, sga);
+            drawTendril(sv.tendril.x, sv.tendril.y, sv.tendril.angle, sv.tendril.size, 0.50 + sga*0.3, sga);
+          }
+          for (var lf = 0; lf < v.leaves.length; lf++) {
+            var leaf = v.leaves[lf];
+            drawLeaf(leaf.x, leaf.y, leaf.angle, leaf.size, a * 0.8, g);
+          }
+          for (var t = 0; t < v.tendrils.length; t++) {
+            var td = v.tendrils[t];
+            drawTendril(td.x, td.y, td.angle, td.size, a * 0.7, g);
+          }
+          for (var f = 0; f < v.flowers.length; f++) {
+            var fl = v.flowers[f];
+            drawRose(fl.x, fl.y, fl.size, fl.bloom, a * 0.95, g);
+          }
+        }
+        for (var p = fallenPetals.length - 1; p >= 0; p--) {
+          var petal = fallenPetals[p];
+          petal.vy += 0.10; petal.vx *= 0.995;
+          petal.x  += petal.vx; petal.y += petal.vy;
+          petal.rot += petal.spin; petal.alpha -= 0.007;
+          if (petal.alpha <= 0 || petal.y > H + 50) { fallenPetals.splice(p, 1); continue; }
           ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(p.rot);
-          ctx.globalAlpha = p.alpha;
+          ctx.translate(petal.x, petal.y);
+          ctx.rotate(petal.rot);
+          ctx.globalAlpha = petal.alpha;
           ctx.beginPath();
           ctx.moveTo(0, 0);
-          ctx.bezierCurveTo( p.size * 0.35,  p.size * 0.05,  p.size * 0.35, -p.size * 0.85,  0, -p.size);
-          ctx.bezierCurveTo(-p.size * 0.35, -p.size * 0.85, -p.size * 0.35,  p.size * 0.05,  0,  0);
-          ctx.fillStyle   = rgba(p.col, 1);
+          ctx.bezierCurveTo( petal.s*0.33,  petal.s*0.05,  petal.s*0.33, -petal.s*0.85,  0, -petal.s);
+          ctx.bezierCurveTo(-petal.s*0.33, -petal.s*0.85, -petal.s*0.33,  petal.s*0.05,  0,  0);
+          ctx.fillStyle = gc(G.bright, 1);
           ctx.fill();
           ctx.globalAlpha = 1;
           ctx.restore();
         }
       }
 
-      /* ── Pflanzen aufbauen ────────────────────────────────── */
-      function buildPlants() {
-        plants = [];
-        var seeds = [0x1A2B3C, 0x4D5E6F, 0x789ABC, 0xDEF012, 0x345678, 0x9ABCDE];
-        var leftXs  = [W * 0.01, W * 0.055, W * 0.10];
-        var rightXs = [W * 0.99, W * 0.945, W * 0.90];
-        for (var i = 0; i < 3; i++) {
-          plants.push(genPlant(leftXs[i],  'left',  seeds[i]));
-          plants.push(genPlant(rightXs[i], 'right', seeds[i + 3]));
-        }
+      /* ── Resize ──────────────────────────────────────────────────── */
+      function resize() {
+        var scene = document.getElementById('vineScene');
+        if (!scene) return;
+        W = cvs.width  = scene.offsetWidth;
+        H = cvs.height = scene.offsetHeight;
+        buildVines();
       }
 
-      /* ── Sway-Physik ──────────────────────────────────────── */
-      var windTime = 0;
-      function updateSway() {
-        windTime += 0.008;
-        for (var i = 0; i < plants.length; i++) {
-          var p    = plants[i];
-          var cx   = (p.side === 'left') ? W * 0.15 : W * 0.85;
-          var mdx  = mouse.x - cx;
-          var wind = Math.sin(windTime + i * 1.3) * 0.004;
-          var mouseForce = 0;
-          if (Math.abs(mouse.x - p.rootX) < 250 && mouse.y > H * 0.5) {
-            mouseForce = (mouse.x - p.rootX) * 0.00004;
-          }
-          var target   = wind + mouseForce;
-          p.swayVel   += (target - p.sway) * 0.06;
-          p.swayVel   *= 0.88;
-          p.sway      += p.swayVel;
-        }
-      }
-
-      /* ── Render-Loop ──────────────────────────────────────── */
+      /* ── Render-Loop ─────────────────────────────────────────────── */
       var lastTs = 0;
       function draw(ts) {
         requestAnimationFrame(draw);
         if (ts - lastTs < 28) return;
         lastTs = ts;
-        ctx.clearRect(0, 0, W, H);
-        updateSway();
-        for (var i = 0; i < plants.length; i++) drawStem(plants[i]);
-        updatePetals();
+        drawAll();
       }
 
-      /* ── Resize ───────────────────────────────────────────── */
-      function resize() {
-        W = cvs.width  = window.innerWidth;
-        H = cvs.height = window.innerHeight;
-        buildPlants();
-      }
-
-      /* ── Events ───────────────────────────────────────────── */
-      document.addEventListener('mousemove', function(e) {
-        mouse.x = e.clientX; mouse.y = e.clientY;
-      });
-
-      document.addEventListener('click', function(e) {
-        for (var i = 0; i < plants.length; i++) {
-          var tip = stemPoint(plants[i], 1.0);
-          var dx  = e.clientX - tip.x, dy = e.clientY - tip.y;
-          if (Math.sqrt(dx*dx + dy*dy) < 80) {
-            spawnPetals(tip.x, tip.y); return;
-          }
-          for (var b = 0; b < plants[i].branches.length; b++) {
-            var br  = plants[i].branches[b];
-            var bp  = stemPoint(plants[i], br.t);
-            var bx2 = bp.x + Math.sin(br.angle) * br.len;
-            var by2 = bp.y - Math.cos(br.angle) * br.len;
-            var dx2 = e.clientX - bx2, dy2 = e.clientY - by2;
-            if (Math.sqrt(dx2*dx2 + dy2*dy2) < 60) {
-              spawnPetals(bx2, by2); return;
+      /* ── Mouse (relativ zur Szene) ───────────────────────────── */
+      var scene = document.getElementById('vineScene');
+      if (scene) {
+        scene.style.pointerEvents = 'auto';
+        scene.addEventListener('mousemove', function(e) {
+          var r   = scene.getBoundingClientRect();
+          mouse.x = e.clientX - r.left;
+          mouse.y = e.clientY - r.top;
+        });
+        scene.addEventListener('mouseleave', function() {
+          mouse.x = -9999; mouse.y = -9999;
+        });
+        scene.addEventListener('click', function(e) {
+          var r  = scene.getBoundingClientRect();
+          var mx = e.clientX - r.left, my = e.clientY - r.top;
+          for (var i = 0; i < vines.length; i++) {
+            var v   = vines[i];
+            var tip = v.pts[v.pts.length - 1];
+            var dx  = mx - tip.x, dy = my - tip.y;
+            if (Math.sqrt(dx*dx + dy*dy) < 70) {
+              for (var k = 0; k < 7; k++) {
+                fallenPetals.push({
+                  x: tip.x, y: tip.y,
+                  vx: (Math.random()-0.5)*3.5,
+                  vy: -2.5 - Math.random()*2.5,
+                  rot: Math.random()*Math.PI*2,
+                  spin: (Math.random()-0.5)*0.14,
+                  s: 5 + Math.random()*6,
+                  alpha: 0.9
+                });
+              }
+              return;
             }
           }
-        }
-      });
+        });
+      }
 
       window.addEventListener('resize', function() {
-        clearTimeout(window._roseResizeT);
-        window._roseResizeT = setTimeout(resize, 150);
+        clearTimeout(window._vineT);
+        window._vineT = setTimeout(resize, 150);
       });
 
+      window.addEventListener('load', function() { setTimeout(resize, 100); });
       resize();
       requestAnimationFrame(draw);
     })();
+
 
   </script>
 </body>
