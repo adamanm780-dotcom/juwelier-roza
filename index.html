@@ -278,16 +278,16 @@
       padding: 0 2rem;
     }
 
-    /* RIZZ ANIMATION – container */
+    /* HUIP ANIMATION – direkt über dem Logo */
     .hero__rizz {
-      height: 72px;
+      height: 90px;
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       justify-content: center;
-      margin-bottom: 1.2rem;
+      margin-bottom: -4px;
       opacity: 0;
-      transform: translateY(-8px);
-      transition: opacity 1.2s var(--ease), transform 1.2s var(--ease);
+      transform: translateY(-6px);
+      transition: opacity 1.4s var(--ease), transform 1.4s var(--ease);
     }
     .hero__rizz.is-visible {
       opacity: 1;
@@ -296,8 +296,9 @@
     .hero__rizz img,
     .hero__rizz video,
     .hero__rizz canvas {
-      height: 72px;
+      height: 90px;
       width: auto;
+      object-fit: contain;
     }
 
     /* LOGO */
