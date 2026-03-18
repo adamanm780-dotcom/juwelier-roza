@@ -294,11 +294,11 @@
       transform: translateY(0);
     }
     .hero__rizz img,
-    .hero__rizz video {
+    .hero__rizz video,
+    .hero__rizz canvas {
       height: 72px;
       width: auto;
       object-fit: contain;
-      mix-blend-mode: multiply;
     }
 
     /* LOGO */
@@ -1732,7 +1732,7 @@
       const container = document.getElementById('rizzWrap');
 
       const attempts = [
-        { src: 'rizz_transparent.webm', tag: 'video' },
+        { src: 'rizz_transparent.webm', tag: 'canvas' },
         { src: 'rizz.gif',  tag: 'img'   },
         { src: 'rizz.webm', tag: 'video' },
         { src: 'rizz.mp4',  tag: 'video' },
@@ -1747,7 +1747,57 @@
         if (i >= attempts.length) return;
         const { src, tag } = attempts[i++];
 
-        if (tag === 'img') {
+        if (tag === 'canvas') {
+          // Canvas-based white-keying: removes white/near-white pixels per frame
+          const vid = document.createElement('video');
+          vid.muted = true; vid.loop = true; vid.playsInline = true;
+          vid.setAttribute('aria-hidden', 'true');
+          vid.style.display = 'none';
+          vid.src = src;
+
+          const cvs = document.createElement('canvas');
+          cvs.setAttribute('aria-hidden', 'true');
+          cvs.style.cssText = 'height:72px;width:auto;display:block;';
+
+          vid.addEventListener('loadedmetadata', () => {
+            const s = 72 / vid.videoHeight;
+            cvs.width  = Math.round(vid.videoWidth * s);
+            cvs.height = 72;
+          }, { once: true });
+
+          vid.addEventListener('canplay', () => {
+            vid.play().then(() => {
+              const ctx = cvs.getContext('2d');
+              (function draw() {
+                if (cvs.width > 0) {
+                  ctx.clearRect(0, 0, cvs.width, cvs.height);
+                  ctx.drawImage(vid, 0, 0, cvs.width, cvs.height);
+                  try {
+                    const id = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                    const d = id.data;
+                    for (let j = 0; j < d.length; j += 4) {
+                      const r = d[j], g = d[j+1], b = d[j+2];
+                      // Weiße und nahezu-weiße Pixel transparent machen
+                      if (r > 200 && g > 200 && b > 200) {
+                        const w = Math.min(r, g, b);
+                        d[j+3] = Math.round(255 * Math.max(0, (1 - (w - 200) / 55)));
+                      }
+                    }
+                    ctx.putImageData(id, 0, 0);
+                  } catch(e) { /* CORS-Fallback: direkt rendern ohne Keying */ }
+                }
+                requestAnimationFrame(draw);
+              })();
+              container.appendChild(cvs);
+              requestAnimationFrame(() => container.classList.add('is-visible'));
+            }).catch(tryNext);
+          }, { once: true });
+
+          vid.addEventListener('error', tryNext, { once: true });
+          container.appendChild(vid);
+          vid.load();
+
+        } else if (tag === 'img') {
           const el = new Image();
           el.alt = '';
           el.setAttribute('aria-hidden', 'true');
@@ -1765,7 +1815,6 @@
           el.playsInline = true;
           el.setAttribute('aria-hidden', 'true');
 
-          // src set directly on video so error fires on video element itself
           el.src = src;
 
           el.addEventListener('canplay', () => {
