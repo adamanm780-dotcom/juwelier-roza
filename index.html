@@ -1724,28 +1724,37 @@
 
 
     // ────────────────────────────────────────────────────────────
-    // RIZZ/HUIP animation – simple video with mix-blend-mode
+    // HUIP animation – WebM VP9 mit echtem Alpha-Kanal
     // ────────────────────────────────────────────────────────────
     (function initRizz() {
-      var container = document.getElementById('rizzWrap');
-      var vid = document.createElement('video');
-      vid.muted      = true;
-      vid.autoplay   = true;
-      vid.loop       = true;
+      var container = document.getElementById("rizzWrap");
+      function show(el) {
+        container.appendChild(el);
+        requestAnimationFrame(function() { container.classList.add("is-visible"); });
+      }
+      var vid = document.createElement("video");
+      vid.muted       = true;
+      vid.autoplay    = true;
+      vid.loop        = true;
       vid.playsInline = true;
-      vid.setAttribute('aria-hidden', 'true');
-      vid.style.cssText = 'mix-blend-mode:screen;display:block;';
-      vid.src = 'huip.mp4';
-      vid.addEventListener('canplay', function() {
-        container.appendChild(vid);
+      vid.setAttribute("aria-hidden", "true");
+      var srcWebM = document.createElement("source");
+      srcWebM.src  = "huip.webm";
+      srcWebM.type = "video/webm";
+      var srcMp4 = document.createElement("source");
+      srcMp4.src  = "huip.mp4";
+      srcMp4.type = "video/mp4";
+      vid.appendChild(srcWebM);
+      vid.appendChild(srcMp4);
+      vid.addEventListener("canplay", function() {
+        show(vid);
         vid.play().catch(function(){});
-        requestAnimationFrame(function() { container.classList.add('is-visible'); });
       }, { once: true });
       vid.load();
-      window.addEventListener('load', function() {
+      window.addEventListener("load", function() {
         setTimeout(function() {
-          if (!container.classList.contains('is-visible')) { vid.load(); }
-        }, 800);
+          if (!container.classList.contains("is-visible")) { vid.load(); }
+        }, 1000);
       });
     })();
 
