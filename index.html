@@ -1805,7 +1805,7 @@
 
       // ── Fallback-Kette ────────────────────────────────────────────
       var queue = [
-        function(next) { tryCanvas('huip.mov', next); },
+        function(next) { tryCanvas('huip.mp4', next); },
         function(next) {
           var el = new Image(); el.alt = ''; el.setAttribute('aria-hidden', 'true');
           el.onload = function() { show(el); };
@@ -1821,7 +1821,7 @@
         function(next) {
           var el = document.createElement('video');
           el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
-          el.setAttribute('aria-hidden', 'true'); el.src = 'huip.mov';
+          el.setAttribute('aria-hidden', 'true'); el.src = 'huip.mp4';
           el.addEventListener('canplay', function() { show(el); el.play().catch(function(){}); }, { once: true });
           el.addEventListener('error', next, { once: true }); el.load();
         },
