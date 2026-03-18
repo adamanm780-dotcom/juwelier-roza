@@ -1681,15 +1681,39 @@
         }
 
         vidA.style.opacity = '1';
-        vidA.play().then(() => {
-          attachWatcher(vidA, vidB);
-        }).catch(() => {
-          // Autoplay blocked → add native loop as fallback
-          vidA.loop = true;
-        });
+
+        function tryPlay() {
+          vidA.play().then(() => {
+            attachWatcher(vidA, vidB);
+          }).catch(() => {
+            // Autoplay still blocked – wait for first user interaction
+            vidA.loop = true;
+            const resume = () => {
+              vidA.play().then(() => {
+                attachWatcher(vidA, vidB);
+              }).catch(() => {});
+              document.removeEventListener('touchstart', resume);
+              document.removeEventListener('click', resume);
+            };
+            document.addEventListener('touchstart', resume, { once: true, passive: true });
+            document.addEventListener('click', resume, { once: true });
+          });
+        }
+
+        tryPlay();
       }
 
+      // Ensure all required attributes are set programmatically (belt & suspenders)
+      vidA.muted     = true;
+      vidA.autoplay  = true;
+      vidA.playsInline = true;
+
       vidA.addEventListener('canplay', start, { once: true });
+
+      // iOS sometimes ignores canplay when page loads in background tab –
+      // force a load attempt so the event fires.
+      if (vidA.readyState >= 3) start();
+      else vidA.load();
 
       // If canplay never fires (no video file yet), silently continue
       vidA.addEventListener('error', () => {
