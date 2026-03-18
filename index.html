@@ -1809,7 +1809,7 @@
     });
 
     // ────────────────────────────────────────────────────────────
-    // GOLDENE MARMOR-ADERN – Desktop only, interaktiv
+    // GOLDENE MARMOR-ADERN – strukturiert gabelig, Desktop only
     // ────────────────────────────────────────────────────────────
     (function initMarbleVeins() {
       if (window.matchMedia('(max-width: 768px)').matches) return;
@@ -1823,11 +1823,11 @@
       ].join(';');
       document.body.appendChild(cvs);
 
-      var ctx = cvs.getContext('2d');
+      var ctx  = cvs.getContext('2d');
       var W = 0, H = 0, docH = 0, heroH = 0;
       var scrollY = 0;
-      var mouse = { x: -9999, y: -9999 };
-      var veins = [];
+      var mouse  = { x: -9999, y: -9999 };
+      var veins  = [];
       var bursts = [];
 
       function mkRng(seed) {
@@ -1838,49 +1838,83 @@
         };
       }
 
-      function genPath(rng, x, y, steps, stepLen, curve) {
+      function makePath(rng, x, y, angle, length, curviness) {
         var pts = [{ x: x, y: y }];
-        var a = rng() * Math.PI * 2;
+        var step = 22;
+        var steps = Math.round(length / step);
+        var a = angle;
         for (var i = 0; i < steps; i++) {
-          a += (rng() - 0.5) * curve;
-          x += Math.cos(a) * stepLen;
-          y += Math.sin(a) * stepLen;
+          a += (rng() - 0.5) * curviness;
+          x += Math.cos(a) * step;
+          y += Math.sin(a) * step;
           pts.push({ x: x, y: y });
         }
         return pts;
       }
 
+      function growBranch(rng, x, y, angle, depth, width, alpha) {
+        if (depth < 0 || width < 0.12) return;
+
+        var len   = (180 + rng() * 160) * (0.55 + depth * 0.45);
+        var curve = 0.18 + (3 - depth) * 0.12;
+        var pts   = makePath(rng, x, y, angle, len, curve);
+
+        veins.push({ pts: pts, w: width, baseA: alpha, glow: 0 });
+
+        var forks = (depth === 3) ? 3 : 2;
+        for (var f = 0; f < forks; f++) {
+          var ratio  = 0.25 + f * (0.5 / forks) + (rng() - 0.5) * 0.1;
+          var idx    = Math.max(0, Math.min(pts.length - 1, Math.round(ratio * pts.length)));
+          var fp     = pts[idx];
+          var side   = (f % 2 === 0) ? 1 : -1;
+          var spread = 0.35 + rng() * 0.45;
+          var fAngle = angle + side * spread;
+
+          growBranch(
+            rng, fp.x, fp.y, fAngle,
+            depth - 1,
+            width * (0.45 + rng() * 0.15),
+            alpha * 0.78
+          );
+        }
+      }
+
       function buildVeins() {
-        var rng = mkRng(0xC0FFEE42);
-        veins = [];
-        var margin = heroH + 40;
-        var area   = docH - margin;
-        var cols   = Math.max(5, Math.floor(W / 260));
+        var rng      = mkRng(0xAB3D77FF);
+        veins        = [];
+        var margin   = heroH + 80;
+        var available= docH - margin;
+        var clusters = Math.max(3, Math.round(W / 420));
 
-        for (var i = 0; i < cols * 3; i++) {
-          var x0  = rng() * W;
-          var y0  = margin + rng() * area;
-          var len = 18 + Math.floor(rng() * 22);
-          var pts = genPath(rng, x0, y0, len, 28 + rng() * 18, 0.42);
-          var w   = 0.6 + rng() * 0.9;
-          var a   = 0.09 + rng() * 0.09;
-          veins.push({ pts: pts, w: w, baseA: a, glow: 0 });
+        for (var c = 0; c < clusters; c++) {
+          var edge = c % 3;
+          var sx, sy, startAngle;
 
-          var branches = Math.floor(rng() * 3);
-          for (var b = 0; b < branches; b++) {
-            var bi   = Math.floor(rng() * pts.length);
-            var bpts = genPath(rng, pts[bi].x, pts[bi].y, 6 + Math.floor(rng() * 10), 18, 0.6);
-            veins.push({ pts: bpts, w: w * 0.4, baseA: a * 0.6, glow: 0 });
+          if (edge === 0) {
+            sx = -10;
+            sy = margin + (c / clusters) * available + (rng() - 0.5) * 200;
+            startAngle = (rng() - 0.5) * 0.6;
+          } else if (edge === 1) {
+            sx = W + 10;
+            sy = margin + (c / clusters) * available + (rng() - 0.5) * 200;
+            startAngle = Math.PI + (rng() - 0.5) * 0.6;
+          } else {
+            sx = W * 0.1 + rng() * W * 0.8;
+            sy = margin + rng() * available;
+            startAngle = rng() * Math.PI * 2;
           }
+
+          sy = Math.max(margin, Math.min(docH - 80, sy));
+          growBranch(rng, sx, sy, startAngle, 3, 1.4 + rng() * 0.5, 0.14 + rng() * 0.08);
         }
       }
 
       function calcGlow(v) {
-        var R = 210, minD = Infinity;
+        var R = 200, minD = Infinity;
         for (var i = 0; i < v.pts.length; i++) {
           var p  = v.pts[i];
           var sy = p.y - scrollY;
-          if (sy < -250 || sy > H + 250) continue;
+          if (sy < -300 || sy > H + 300) continue;
           var dx = p.x - mouse.x, dy = sy - mouse.y;
           var d  = Math.sqrt(dx * dx + dy * dy);
           if (d < minD) minD = d;
@@ -1891,23 +1925,24 @@
       function drawVein(v) {
         var pts = v.pts;
         if (pts.length < 2) return;
+
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y - scrollY);
         for (var i = 1; i < pts.length - 1; i++) {
-          var cx = pts[i].x,     cy = pts[i].y - scrollY;
-          var nx = (pts[i].x + pts[i+1].x) * 0.5;
-          var ny = (pts[i].y + pts[i+1].y) * 0.5 - scrollY;
+          var cx = pts[i].x,   cy = pts[i].y - scrollY;
+          var nx = (pts[i].x   + pts[i+1].x) * 0.5;
+          var ny = (pts[i].y   + pts[i+1].y) * 0.5 - scrollY;
           ctx.quadraticCurveTo(cx, cy, nx, ny);
         }
         var last = pts[pts.length - 1];
         ctx.lineTo(last.x, last.y - scrollY);
 
-        var alpha = v.baseA + v.glow * 0.52;
-        var lw    = v.w + v.glow * 2.2;
+        var alpha = v.baseA + v.glow * 0.55;
+        var lw    = v.w    + v.glow * 2.5;
 
         if (v.glow > 0.03) {
-          ctx.shadowColor = 'rgba(210,172,90,' + (v.glow * 0.75) + ')';
-          ctx.shadowBlur  = 5 + v.glow * 16;
+          ctx.shadowColor = 'rgba(215,175,90,' + (v.glow * 0.8) + ')';
+          ctx.shadowBlur  = 4 + v.glow * 18;
         } else {
           ctx.shadowBlur  = 0;
         }
@@ -1922,7 +1957,7 @@
       function drawBursts() {
         for (var i = bursts.length - 1; i >= 0; i--) {
           var b = bursts[i];
-          b.r += 4.5; b.a -= 0.022;
+          b.r += 5; b.a -= 0.024;
           if (b.a <= 0) { bursts.splice(i, 1); continue; }
           ctx.beginPath();
           ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
@@ -1942,8 +1977,8 @@
         lastTs = ts;
         ctx.clearRect(0, 0, W, H);
         for (var i = 0; i < veins.length; i++) {
-          var target = calcGlow(veins[i]);
-          veins[i].glow += (target - veins[i].glow) * 0.1;
+          var t = calcGlow(veins[i]);
+          veins[i].glow += (t - veins[i].glow) * 0.1;
           drawVein(veins[i]);
         }
         drawBursts();
@@ -1958,12 +1993,11 @@
       }
 
       function updateOpacity() {
-        cvs.style.opacity = (window.scrollY > heroH * 0.65) ? '1' : '0';
+        cvs.style.opacity = (window.scrollY > heroH * 0.6) ? '1' : '0';
       }
 
       window.addEventListener('scroll', function() {
-        scrollY = window.scrollY;
-        updateOpacity();
+        scrollY = window.scrollY; updateOpacity();
       }, { passive: true });
 
       document.addEventListener('mousemove', function(e) {
@@ -1972,21 +2006,20 @@
 
       document.addEventListener('click', function(e) {
         if (e.target.closest('a,button,input,select,textarea')) return;
-        bursts.push({ x: e.clientX, y: e.clientY, r: 4,  a: 0.75 });
-        bursts.push({ x: e.clientX, y: e.clientY, r: 1,  a: 0.50 });
-        bursts.push({ x: e.clientX, y: e.clientY, r: 0,  a: 0.35 });
+        bursts.push({ x: e.clientX, y: e.clientY, r: 4, a: 0.75 });
+        bursts.push({ x: e.clientX, y: e.clientY, r: 1, a: 0.50 });
+        bursts.push({ x: e.clientX, y: e.clientY, r: 0, a: 0.32 });
       });
 
       window.addEventListener('resize', function() {
-        clearTimeout(window._marbleResizeT);
-        window._marbleResizeT = setTimeout(resize, 150);
+        clearTimeout(window._mrvT);
+        window._mrvT = setTimeout(resize, 150);
       });
 
       window.addEventListener('load', function() { setTimeout(resize, 200); });
       resize();
       requestAnimationFrame(draw);
     })();
-
 
   </script>
 </body>
