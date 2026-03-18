@@ -225,7 +225,7 @@
       background: var(--charcoal);
     }
 
-    /* Video container – two stacked videos for seamless crossfade loop */
+    /* Video container */
     .hero__video-wrap {
       position: absolute;
       inset: 0;
@@ -1229,19 +1229,12 @@
   ============================================================ -->
   <section class="hero" id="hero" aria-label="Hero – Juwelier Roza">
 
-    <!-- Two-video crossfade for seamless loop -->
+    <!-- Seamless loop – single video, requestVideoFrameCallback -->
     <div class="hero__video-wrap" aria-hidden="true">
       <video class="hero__video" id="heroVidA"
         autoplay muted playsinline preload="auto">
         <source src="utzi.mp4"  type="video/mp4">
         <source src="utzi.webm" type="video/webm">
-        <source src="utzi.mov"  type="video/quicktime">
-      </video>
-      <video class="hero__video hero__video--b" id="heroVidB"
-        muted playsinline preload="auto">
-        <source src="utzi.mp4"  type="video/mp4">
-        <source src="utzi.webm" type="video/webm">
-        <source src="utzi.mov"  type="video/quicktime">
       </video>
     </div>
 
@@ -1654,100 +1647,49 @@
 
 
     // ────────────────────────────────────────────────────────────
-    // Seamless video loop via crossfade
-    // Two instances of the same video crossfade to eliminate
-    // the hard-cut that native loop attribute can produce.
+    // Seamless video loop – requestVideoFrameCallback
+    // Springt 0.1 s vor Ende zurück → kein Decoder-Gap, kein sichtbarer Cut.
     // ────────────────────────────────────────────────────────────
     (function initSeamlessLoop() {
-      const vidA = document.getElementById('heroVidA');
-      const vidB = document.getElementById('heroVidB');
+      var vid = document.getElementById('heroVidA');
+      var EARLY = 0.1; // Sekunden vor Ende zurückspringen
 
-      const FADE_MS = 900;     // crossfade duration in ms
-      const BUFFER  = 1.2;     // seconds before end to start fade
-
-      let fading = false;
-
-      function applyFade(fadeIn, fadeOut) {
-        if (fading) return;
-        fading = true;
-
-        fadeIn.currentTime = 0;
-        fadeIn.play().catch(() => {});
-
-        fadeIn.style.transition  = `opacity ${FADE_MS}ms ease`;
-        fadeOut.style.transition = `opacity ${FADE_MS}ms ease`;
-
-        requestAnimationFrame(() => {
-          fadeIn.style.opacity  = '1';
-          fadeOut.style.opacity = '0';
-        });
-
-        setTimeout(() => {
-          fadeOut.pause();
-          fadeOut.style.transition = 'none';
-          fadeIn.style.transition  = 'none';
-          fading = false;
-          attachWatcher(fadeIn, fadeOut);
-        }, FADE_MS + 100);
-      }
-
-      function attachWatcher(primary, secondary) {
-        function watch() {
-          if (!primary.duration || isNaN(primary.duration)) return;
-          if (primary.duration - primary.currentTime <= BUFFER) {
-            primary.removeEventListener('timeupdate', watch);
-            applyFade(secondary, primary);
-          }
+      function loopGuard() {
+        if (vid.duration && !isNaN(vid.duration) && vid.currentTime >= vid.duration - EARLY) {
+          vid.currentTime = 0;
         }
-        primary.addEventListener('timeupdate', watch);
+        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+          vid.requestVideoFrameCallback(loopGuard);
+        }
       }
 
       function start() {
-        // Prefer crossfade loop; fall back to native loop if needed
-        if (!vidA.src && !vidA.querySelector('source')) {
-          // No video source found
-          return;
-        }
-
-        vidA.style.opacity = '1';
-
-        function tryPlay() {
-          vidA.play().then(() => {
-            attachWatcher(vidA, vidB);
-          }).catch(() => {
-            // Autoplay still blocked – wait for first user interaction
-            vidA.loop = true;
-            const resume = () => {
-              vidA.play().then(() => {
-                attachWatcher(vidA, vidB);
-              }).catch(() => {});
-              document.removeEventListener('touchstart', resume);
-              document.removeEventListener('click', resume);
-            };
-            document.addEventListener('touchstart', resume, { once: true, passive: true });
-            document.addEventListener('click', resume, { once: true });
-          });
-        }
-
-        tryPlay();
+        vid.style.opacity = '1';
+        vid.play().then(function() {
+          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            vid.requestVideoFrameCallback(loopGuard);
+          } else {
+            vid.addEventListener('timeupdate', loopGuard);
+          }
+        }).catch(function() {
+          vid.loop = true;
+          var resume = function() {
+            vid.play().catch(function(){});
+            document.removeEventListener('touchstart', resume);
+            document.removeEventListener('click', resume);
+          };
+          document.addEventListener('touchstart', resume, { once: true, passive: true });
+          document.addEventListener('click', resume, { once: true });
+        });
       }
 
-      // Ensure all required attributes are set programmatically (belt & suspenders)
-      vidA.muted     = true;
-      vidA.autoplay  = true;
-      vidA.playsInline = true;
+      vid.addEventListener('canplay', start, { once: true });
+      if (vid.readyState >= 3) start();
+      else vid.load();
 
-      vidA.addEventListener('canplay', start, { once: true });
-
-      // iOS sometimes ignores canplay when page loads in background tab –
-      // force a load attempt so the event fires.
-      if (vidA.readyState >= 3) start();
-      else vidA.load();
-
-      // If canplay never fires (no video file yet), silently continue
-      vidA.addEventListener('error', () => {
-        document.querySelector('.hero__video-wrap').style.background =
-          'linear-gradient(148deg, #2A2318 0%, #0D0A06 100%)';
+      vid.addEventListener('error', function() {
+        var wrap = document.querySelector('.hero__video-wrap');
+        if (wrap) wrap.style.background = 'linear-gradient(148deg, #2A2318 0%, #0D0A06 100%)';
       }, { once: true });
     })();
 
