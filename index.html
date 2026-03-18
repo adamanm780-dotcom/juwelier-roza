@@ -1652,27 +1652,15 @@
     // ────────────────────────────────────────────────────────────
     (function initSeamlessLoop() {
       var vid = document.getElementById('heroVidA');
-      var EARLY = 0.05; // Video sauber geschnitten, minimaler Puffer
 
-      function loopGuard() {
-        if (vid.duration && !isNaN(vid.duration) && vid.currentTime >= vid.duration - EARLY) {
-          vid.currentTime = 0;
-        }
-        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-          vid.requestVideoFrameCallback(loopGuard);
-        }
-      }
+      // Crossfade ist direkt ins Video eingebacken (xfade-Filter).
+      // Natives loop-Attribut reicht – kein JS-Seek nötig.
+      vid.loop = true;
 
       function start() {
         vid.style.opacity = '1';
-        vid.play().then(function() {
-          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-            vid.requestVideoFrameCallback(loopGuard);
-          } else {
-            vid.addEventListener('timeupdate', loopGuard);
-          }
-        }).catch(function() {
-          vid.loop = true;
+        vid.play().catch(function() {
+          // Autoplay blockiert – bei erster Interaktion starten
           var resume = function() {
             vid.play().catch(function(){});
             document.removeEventListener('touchstart', resume);
