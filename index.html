@@ -1724,115 +1724,29 @@
 
 
     // ────────────────────────────────────────────────────────────
-    // RIZZ animation – weißer Hintergrund wird per Canvas-Keying
-    // frame-genau entfernt. Nutzt Sättigungs-Helligkeits-Check,
-    // damit Gold erhalten bleibt und nur weiß/grau transparent wird.
+    // RIZZ/HUIP animation – simple video with mix-blend-mode
     // ────────────────────────────────────────────────────────────
     (function initRizz() {
-      const container = document.getElementById('rizzWrap');
-      const H = 72; // Anzeigehöhe in px
-
-      function show(el) {
-        container.innerHTML = '';
-        container.appendChild(el);
-        container.classList.add('is-visible');
-      }
-
-      // ── Canvas-Keying: entfernt weißen/hellen Hintergrund ────────
-      function tryCanvas(src, onFail) {
-        var vid = document.createElement('video');
-        vid.muted = true; vid.loop = true; vid.playsInline = true;
-        vid.setAttribute('aria-hidden', 'true');
-        vid.style.display = 'none';
-        vid.src = src;
-
-        var cvs = document.createElement('canvas');
-        cvs.setAttribute('aria-hidden', 'true');
-
-        function setSize() {
-          if (!vid.videoWidth || !vid.videoHeight) return;
-          var scale = H / vid.videoHeight;
-          cvs.width  = Math.round(vid.videoWidth * scale);
-          cvs.height = H;
-          cvs.style.width  = cvs.width  + 'px';
-          cvs.style.height = cvs.height + 'px';
-        }
-        vid.addEventListener('loadedmetadata', setSize, { once: true });
-
-        vid.addEventListener('canplay', function() {
-          setSize(); // Sicherheits-Fallback falls loadedmetadata zu spät kam
-          if (!cvs.width || !cvs.height) { onFail(); return; }
-
-          vid.play().then(function() {
-            var ctx = cvs.getContext('2d');
-
-            function draw() {
-              ctx.clearRect(0, 0, cvs.width, cvs.height);
-              ctx.drawImage(vid, 0, 0, cvs.width, cvs.height);
-
-              try {
-                var img = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                var d = img.data;
-                for (var i = 0; i < d.length; i += 4) {
-                  var r = d[i], g = d[i+1], b = d[i+2];
-                  var maxC = Math.max(r, g, b);
-                  var minC = Math.min(r, g, b);
-                  var brightness  = (r + g + b) / 3;
-                  // Sättigung: 0 = grau/weiß, 1 = volles Farbe
-                  var saturation  = maxC > 0 ? (maxC - minC) / maxC : 0;
-                  // Nur Pixel entfernen die hell UND ungesättigt sind (Weiß/Grau)
-                  // Goldfarbe (r≈200, g≈160, b≈92) hat Sättigung ~0.54 → bleibt erhalten
-                  if (brightness > 190 && saturation < 0.18) {
-                    var alpha = Math.max(0, 1 - (brightness - 190) / 65);
-                    d[i+3] = Math.round(255 * alpha);
-                  }
-                }
-                ctx.putImageData(img, 0, 0);
-              } catch(e) { /* CORS – kein Keying möglich, trotzdem anzeigen */ }
-
-              requestAnimationFrame(draw);
-            }
-
-            show(cvs);
-            requestAnimationFrame(draw);
-          }).catch(onFail);
-        }, { once: true });
-
-        vid.addEventListener('error', onFail, { once: true });
+      var container = document.getElementById('rizzWrap');
+      var vid = document.createElement('video');
+      vid.muted      = true;
+      vid.autoplay   = true;
+      vid.loop       = true;
+      vid.playsInline = true;
+      vid.setAttribute('aria-hidden', 'true');
+      vid.style.cssText = 'mix-blend-mode:screen;display:block;';
+      vid.src = 'huip.mp4';
+      vid.addEventListener('canplay', function() {
         container.appendChild(vid);
-        vid.load();
-      }
-
-      // ── Fallback-Kette ────────────────────────────────────────────
-      var queue = [
-        function(next) { tryCanvas('huip.mp4', next); },
-        function(next) {
-          var el = new Image(); el.alt = ''; el.setAttribute('aria-hidden', 'true');
-          el.onload = function() { show(el); };
-          el.onerror = next; el.src = 'huip.gif';
-        },
-        function(next) {
-          var el = document.createElement('video');
-          el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
-          el.setAttribute('aria-hidden', 'true'); el.src = 'huip.webm';
-          el.addEventListener('canplay', function() { show(el); el.play().catch(function(){}); }, { once: true });
-          el.addEventListener('error', next, { once: true }); el.load();
-        },
-        function(next) {
-          var el = document.createElement('video');
-          el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
-          el.setAttribute('aria-hidden', 'true'); el.src = 'huip.mp4';
-          el.addEventListener('canplay', function() { show(el); el.play().catch(function(){}); }, { once: true });
-          el.addEventListener('error', next, { once: true }); el.load();
-        },
-      ];
-
-      var qi = 0;
-      function tryNext() {
-        if (qi < queue.length) queue[qi++](tryNext);
-      }
-
-      window.addEventListener('load', function() { setTimeout(tryNext, 800); });
+        vid.play().catch(function(){});
+        requestAnimationFrame(function() { container.classList.add('is-visible'); });
+      }, { once: true });
+      vid.load();
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          if (!container.classList.contains('is-visible')) { vid.load(); }
+        }, 800);
+      });
     })();
 
 
