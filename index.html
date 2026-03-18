@@ -1808,6 +1808,186 @@
       });
     });
 
+    // ────────────────────────────────────────────────────────────
+    // GOLDENE MARMOR-ADERN – Desktop only, interaktiv
+    // ────────────────────────────────────────────────────────────
+    (function initMarbleVeins() {
+      if (window.matchMedia('(max-width: 768px)').matches) return;
+
+      var cvs = document.createElement('canvas');
+      cvs.setAttribute('aria-hidden', 'true');
+      cvs.style.cssText = [
+        'position:fixed','inset:0','width:100%','height:100%',
+        'z-index:1','pointer-events:none','opacity:0',
+        'transition:opacity 1.2s ease','will-change:opacity'
+      ].join(';');
+      document.body.appendChild(cvs);
+
+      var ctx = cvs.getContext('2d');
+      var W = 0, H = 0, docH = 0, heroH = 0;
+      var scrollY = 0;
+      var mouse = { x: -9999, y: -9999 };
+      var veins = [];
+      var bursts = [];
+
+      function mkRng(seed) {
+        var s = seed >>> 0;
+        return function() {
+          s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+          return (s >>> 0) / 4294967295;
+        };
+      }
+
+      function genPath(rng, x, y, steps, stepLen, curve) {
+        var pts = [{ x: x, y: y }];
+        var a = rng() * Math.PI * 2;
+        for (var i = 0; i < steps; i++) {
+          a += (rng() - 0.5) * curve;
+          x += Math.cos(a) * stepLen;
+          y += Math.sin(a) * stepLen;
+          pts.push({ x: x, y: y });
+        }
+        return pts;
+      }
+
+      function buildVeins() {
+        var rng = mkRng(0xC0FFEE42);
+        veins = [];
+        var margin = heroH + 40;
+        var area   = docH - margin;
+        var cols   = Math.max(5, Math.floor(W / 260));
+
+        for (var i = 0; i < cols * 3; i++) {
+          var x0  = rng() * W;
+          var y0  = margin + rng() * area;
+          var len = 18 + Math.floor(rng() * 22);
+          var pts = genPath(rng, x0, y0, len, 28 + rng() * 18, 0.42);
+          var w   = 0.6 + rng() * 0.9;
+          var a   = 0.09 + rng() * 0.09;
+          veins.push({ pts: pts, w: w, baseA: a, glow: 0 });
+
+          var branches = Math.floor(rng() * 3);
+          for (var b = 0; b < branches; b++) {
+            var bi   = Math.floor(rng() * pts.length);
+            var bpts = genPath(rng, pts[bi].x, pts[bi].y, 6 + Math.floor(rng() * 10), 18, 0.6);
+            veins.push({ pts: bpts, w: w * 0.4, baseA: a * 0.6, glow: 0 });
+          }
+        }
+      }
+
+      function calcGlow(v) {
+        var R = 210, minD = Infinity;
+        for (var i = 0; i < v.pts.length; i++) {
+          var p  = v.pts[i];
+          var sy = p.y - scrollY;
+          if (sy < -250 || sy > H + 250) continue;
+          var dx = p.x - mouse.x, dy = sy - mouse.y;
+          var d  = Math.sqrt(dx * dx + dy * dy);
+          if (d < minD) minD = d;
+        }
+        return minD < R ? Math.pow(1 - minD / R, 2) : 0;
+      }
+
+      function drawVein(v) {
+        var pts = v.pts;
+        if (pts.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y - scrollY);
+        for (var i = 1; i < pts.length - 1; i++) {
+          var cx = pts[i].x,     cy = pts[i].y - scrollY;
+          var nx = (pts[i].x + pts[i+1].x) * 0.5;
+          var ny = (pts[i].y + pts[i+1].y) * 0.5 - scrollY;
+          ctx.quadraticCurveTo(cx, cy, nx, ny);
+        }
+        var last = pts[pts.length - 1];
+        ctx.lineTo(last.x, last.y - scrollY);
+
+        var alpha = v.baseA + v.glow * 0.52;
+        var lw    = v.w + v.glow * 2.2;
+
+        if (v.glow > 0.03) {
+          ctx.shadowColor = 'rgba(210,172,90,' + (v.glow * 0.75) + ')';
+          ctx.shadowBlur  = 5 + v.glow * 16;
+        } else {
+          ctx.shadowBlur  = 0;
+        }
+        ctx.strokeStyle = 'rgba(195,155,68,' + alpha + ')';
+        ctx.lineWidth   = lw;
+        ctx.lineCap     = 'round';
+        ctx.lineJoin    = 'round';
+        ctx.stroke();
+        ctx.shadowBlur  = 0;
+      }
+
+      function drawBursts() {
+        for (var i = bursts.length - 1; i >= 0; i--) {
+          var b = bursts[i];
+          b.r += 4.5; b.a -= 0.022;
+          if (b.a <= 0) { bursts.splice(i, 1); continue; }
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(210,172,90,' + b.a + ')';
+          ctx.lineWidth   = 1.2;
+          ctx.shadowColor = 'rgba(210,172,90,' + (b.a * 0.7) + ')';
+          ctx.shadowBlur  = 10;
+          ctx.stroke();
+          ctx.shadowBlur  = 0;
+        }
+      }
+
+      var lastTs = 0;
+      function draw(ts) {
+        requestAnimationFrame(draw);
+        if (ts - lastTs < 30) return;
+        lastTs = ts;
+        ctx.clearRect(0, 0, W, H);
+        for (var i = 0; i < veins.length; i++) {
+          var target = calcGlow(veins[i]);
+          veins[i].glow += (target - veins[i].glow) * 0.1;
+          drawVein(veins[i]);
+        }
+        drawBursts();
+      }
+
+      function resize() {
+        W     = cvs.width  = window.innerWidth;
+        H     = cvs.height = window.innerHeight;
+        docH  = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+        heroH = (document.getElementById('hero') || {}).offsetHeight || H;
+        buildVeins();
+      }
+
+      function updateOpacity() {
+        cvs.style.opacity = (window.scrollY > heroH * 0.65) ? '1' : '0';
+      }
+
+      window.addEventListener('scroll', function() {
+        scrollY = window.scrollY;
+        updateOpacity();
+      }, { passive: true });
+
+      document.addEventListener('mousemove', function(e) {
+        mouse.x = e.clientX; mouse.y = e.clientY;
+      });
+
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        bursts.push({ x: e.clientX, y: e.clientY, r: 4,  a: 0.75 });
+        bursts.push({ x: e.clientX, y: e.clientY, r: 1,  a: 0.50 });
+        bursts.push({ x: e.clientX, y: e.clientY, r: 0,  a: 0.35 });
+      });
+
+      window.addEventListener('resize', function() {
+        clearTimeout(window._marbleResizeT);
+        window._marbleResizeT = setTimeout(resize, 150);
+      });
+
+      window.addEventListener('load', function() { setTimeout(resize, 200); });
+      resize();
+      requestAnimationFrame(draw);
+    })();
+
+
   </script>
 </body>
 </html>
