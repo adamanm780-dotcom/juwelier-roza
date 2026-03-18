@@ -1805,23 +1805,23 @@
 
       // ── Fallback-Kette ────────────────────────────────────────────
       var queue = [
-        function(next) { tryCanvas('nifa.mp4', next); },
+        function(next) { tryCanvas('huip.mov', next); },
         function(next) {
           var el = new Image(); el.alt = ''; el.setAttribute('aria-hidden', 'true');
           el.onload = function() { show(el); };
-          el.onerror = next; el.src = 'nifa.gif';
+          el.onerror = next; el.src = 'huip.gif';
         },
         function(next) {
           var el = document.createElement('video');
           el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
-          el.setAttribute('aria-hidden', 'true'); el.src = 'nifa.webm';
+          el.setAttribute('aria-hidden', 'true'); el.src = 'huip.webm';
           el.addEventListener('canplay', function() { show(el); el.play().catch(function(){}); }, { once: true });
           el.addEventListener('error', next, { once: true }); el.load();
         },
         function(next) {
           var el = document.createElement('video');
           el.muted = true; el.autoplay = true; el.loop = true; el.playsInline = true;
-          el.setAttribute('aria-hidden', 'true'); el.src = 'nifa.mp4';
+          el.setAttribute('aria-hidden', 'true'); el.src = 'huip.mov';
           el.addEventListener('canplay', function() { show(el); el.play().catch(function(){}); }, { once: true });
           el.addEventListener('error', next, { once: true }); el.load();
         },
