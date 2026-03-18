@@ -1233,8 +1233,8 @@
     <div class="hero__video-wrap" aria-hidden="true">
       <video class="hero__video" id="heroVidA"
         autoplay muted playsinline preload="auto">
-        <source src="utzi.mp4"  type="video/mp4">
-        <source src="utzi.webm" type="video/webm">
+        <source src="uizu.mp4"  type="video/mp4">
+        <source src="uizu.webm" type="video/webm">
       </video>
     </div>
 
@@ -1652,7 +1652,7 @@
     // ────────────────────────────────────────────────────────────
     (function initSeamlessLoop() {
       var vid = document.getElementById('heroVidA');
-      var EARLY = 0.1; // Sekunden vor Ende zurückspringen
+      var EARLY = 0.05; // Video sauber geschnitten, minimaler Puffer
 
       function loopGuard() {
         if (vid.duration && !isNaN(vid.duration) && vid.currentTime >= vid.duration - EARLY) {
