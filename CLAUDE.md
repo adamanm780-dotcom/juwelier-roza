@@ -3,24 +3,26 @@
 ## Projekt-Übersicht
 
 Einseitige Premium-Website für **Juwelier Roza**, Wiesbaden.
-Live: **https://adamanm780-dotcom.github.io/juwelier-roza/**
-Repo: **https://github.com/adamanm780-dotcom/juwelier-roza**
-Lokales Arbeitsverzeichnis: `C:/Users/Adria/AppData/Local/Temp/juwelier-roza-git/`
 
-Alle Änderungen werden in diesem Verzeichnis bearbeitet, dann committet und nach `main` gepusht. GitHub Pages serviert direkt aus dem `main`-Branch (Root `/`).
+- **Live:** https://adamanm780-dotcom.github.io/juwelier-roza/
+- **Repo:** https://github.com/adamanm780-dotcom/juwelier-roza
+- **Lokales Arbeitsverzeichnis:** `C:/Users/Adria/Documents/GitHub/juwelier-roza/`
+
+Alle Änderungen hier bearbeiten, committen und nach `main` pushen. GitHub Pages serviert direkt aus dem `main`-Branch (Root `/`).
 
 ---
 
 ## Dateistruktur
 
 ```
-index.html          ← komplette Website (CSS + JS inline, ~2220 Zeilen)
+index.html          ← komplette Website (CSS + JS inline, ~2200 Zeilen)
 uizu.mp4            ← Hero-Hintergrundvideo (H.264, loop-gebacken via xfade)
-huip.webm           ← Animationslogo über piner (VP9, yuva420p, Alpha-Kanal)
+huip.webm           ← Animations-Logo über piner (VP9, yuva420p, Alpha-Kanal)
 huip.mp4            ← Fallback für huip.webm (H.264, 10fps)
 zui.png             ← Mobiles Ersatzbild für die huip-Animation
 Bilder/
   piner.png         ← Hauptlogo (PNG)
+CLAUDE.md           ← diese Datei
 ```
 
 ---
@@ -89,12 +91,10 @@ Bilder/
 ## Deployment-Workflow
 
 ```bash
-# Datei bearbeiten:
-# C:/Users/Adria/AppData/Local/Temp/juwelier-roza-git/index.html
-
-cd "C:/Users/Adria/AppData/Local/Temp/juwelier-roza-git"
+cd "C:/Users/Adria/Documents/GitHub/juwelier-roza"
+# Dateien bearbeiten, dann:
 git add index.html
-git commit -m "Beschreibung der Änderung"
+git commit -m "Kurze Beschreibung"
 git push
 # → GitHub Pages aktualisiert sich nach ca. 1–2 Minuten
 ```
